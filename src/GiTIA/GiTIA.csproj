@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <!-- TIA Portal and Openness are 64-bit only. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <TiaPublicApi>$(ProgramW6432)\Siemens\Automation\Portal V21\PublicAPI\V21\net48</TiaPublicApi>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GiTIA.Core\GiTIA.Core.csproj" />
+    <Reference Include="System.Design" />
+    <Reference Include="Microsoft.VisualBasic" />
+    <!-- Loaded from the TIA install at runtime (Tia.RegisterAssemblyResolver), never copied. -->
+    <Reference Include="Siemens.Engineering.Base">
+      <HintPath>$(TiaPublicApi)\Siemens.Engineering.Base.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
