@@ -13,6 +13,8 @@ Historikken er git-historikken. Det trengs ingen egen server.
    Appen kobler seg til TIA som kjører, kompilerer alle enheter (spør om du vil fortsette hvis det feiler), lagrer,
    arkiverer til arkivmappen og laster opp. Låsen din frigjøres.
    Feiler TIA-delen, viser appen hva som gikk galt og hvordan du gjør det manuelt, og lar deg velge .zap-filen selv.
+   På anlegg der oppetid er viktigst: slå på *Spør hvor godt endringen er testet* under **Innstillinger**, så må du også
+   skrive hvor godt endringen er testet på anlegget (vises som f.eks. `[Testet: kjørt med pumpe 2 i manuell]` i historikken).
 
 Andres utsjekker vises i rødt. Laster du ned et prosjekt noen andre har sjekket ut, får du en tydelig advarsel.
 Glemt utsjekk kan brytes med **Bryt låsen**.
@@ -29,7 +31,7 @@ Glemt utsjekk kan brytes med **Bryt låsen**.
 Innstillinger ligger i `%APPDATA%\GiTIA\settings.xml`, appens egen kopi av repoet i `%LOCALAPPDATA%\GiTIA\`.
 
 ## Bygge
-
+ø
 Krever .NET SDK og TIA Portal V21 installert (koden refererer Openness-DLL-en derfra).
 
 ```

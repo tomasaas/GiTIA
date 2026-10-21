@@ -136,7 +136,7 @@ namespace GiTIA
             await RefreshProjects(); // the warnings below must be up to date
             var preselect = Selected?.Lock?.Mine == true ? Selected : projects.FirstOrDefault(p => p.Lock?.Mine == true) ?? Selected;
             string name, description, uploader, zap;
-            using (var form = new UploadForm(projects.Select(p => p.Name), preselect?.Name, settings.UserName))
+            using (var form = new UploadForm(projects.Select(p => p.Name), preselect?.Name, settings.UserName, settings.AskTestLevel))
             {
                 if (form.ShowDialog(this) != DialogResult.OK) return;
                 (name, description, uploader, zap) = (form.Project, form.Description, form.Uploader, form.ZapFile);

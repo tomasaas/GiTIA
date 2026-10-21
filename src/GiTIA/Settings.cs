@@ -36,6 +36,10 @@ namespace GiTIA
         [Editor(typeof(FolderNameEditor), typeof(UITypeEditor))]
         public string DownloadFolder { get; set; } = Path.Combine(Documents, "TIA-nedlastinger");
 
+        [Category("4. Opplasting"), DisplayName("Spør hvor godt endringen er testet")]
+        [Description("True: ved opplasting må du skrive hvor godt endringen er testet på anlegget, og det vises foran «Hva er endret» i historikken. For anlegg der oppetid er viktigst.")]
+        public bool AskTestLevel { get; set; }
+
         // The app's own clone of the repo; another URL gets its own clone.
         [Browsable(false)]
         public string RepoFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GiTIA",
