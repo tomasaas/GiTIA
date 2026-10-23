@@ -31,7 +31,7 @@ Glemt utsjekk kan brytes med **Bryt låsen**.
 Innstillinger ligger i `%APPDATA%\GiTIA\settings.xml`, appens egen kopi av repoet i `%LOCALAPPDATA%\GiTIA\`.
 
 ## Bygge
-ø
+
 Krever .NET SDK og TIA Portal V21 installert (koden refererer Openness-DLL-en derfra).
 
 ```
@@ -39,7 +39,7 @@ dotnet build GiTIA.sln
 dotnet test tests/GiTIA.Core.Tests
 ```
 
-Del innholdet i `src/GiTIA/bin/Debug/net48/` med kollegaene (Siemens-DLL-ene lastes fra TIA-installasjonen og skal ikke kopieres).
+Del `src/GiTIA/bin/Release/net48/GiTIA.exe` med kollegaene (bygg med `dotnet build GiTIA.sln -c Release`). Exe-en er én fil uten andre DLL-er: Siemens-DLL-ene lastes fra TIA-installasjonen.
 
 ## Begrensninger
 

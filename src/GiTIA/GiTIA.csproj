@@ -11,7 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GiTIA.Core\GiTIA.Core.csproj" />
+    <!-- Core is compiled into the exe so GiTIA.exe runs on its own; the Core project stays for the tests. -->
+    <Compile Include="..\GiTIA.Core\*.cs" />
     <Reference Include="System.Design" />
     <Reference Include="Microsoft.VisualBasic" />
     <!-- Loaded from the TIA install at runtime (Tia.RegisterAssemblyResolver), never copied. -->
