@@ -37,8 +37,12 @@ namespace GiTIA
         public string DownloadFolder { get; set; } = Path.Combine(Documents, "TIA-nedlastinger");
 
         [Category("4. Opplasting"), DisplayName("Spør hvor godt endringen er testet")]
-        [Description("True: ved opplasting må du skrive hvor godt endringen er testet på anlegget, og det vises foran «Hva er endret» i historikken. For anlegg der oppetid er viktigst.")]
+        [Description("True: ved opplasting må du skrive hvor godt endringen er testet på anlegget, og det vises i egen kolonne i historikken. For anlegg der oppetid er viktigst.")]
         public bool AskTestLevel { get; set; }
+
+        [Category("4. Opplasting"), DisplayName("Vis kommentarfelt")]
+        [Description("True: ved opplasting kan du skrive en kommentar (f.eks. om en kjent feil), og den vises i egen kolonne i historikken. Feltet kan stå tomt.")]
+        public bool AskComment { get; set; }
 
         // The app's own clone of the repo; another URL gets its own clone.
         [Browsable(false)]

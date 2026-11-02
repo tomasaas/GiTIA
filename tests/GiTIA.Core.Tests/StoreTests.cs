@@ -66,9 +66,21 @@ namespace GiTIA.Core.Tests
             ola.Download(project.Latest, file);
             Assert.That(File.ReadAllBytes(file), Is.EqualTo(File.ReadAllBytes(v2)));
 
+            Assert.That(kaare.LfsBytes(), Is.EqualTo(400_000), "both versions, each 200 000 bytes");
+
             // The archive itself lives in Git LFS; git only holds a pointer.
             Assert.That(Git.Run(Path.Combine(root, "remote.git"), "show", "main:" + project.Latest.RepoPath),
                 Does.StartWith("version https://git-lfs"));
+
+            // Editing an old version's description: shown to everyone, git history untouched.
+            ola.EditMessage(project.Revisions[1], Revision.Compose("Første versjon", "IKKE TESTET", null), "Ola Nordmann");
+            ola.EditMessage(project.Revisions[1], Revision.Compose("Første\nversjon", "Testet OK", "Bug i regventil"), "Ola Nordmann");
+            var edited = kaare.Refresh().Single();
+            Assert.That(edited.Revisions.Select(r => r.Commit), Is.EqualTo(project.Revisions.Select(r => r.Commit)));
+            Assert.That(edited.Revisions[1].Changes, Is.EqualTo("Første versjon"));
+            Assert.That(edited.Revisions[1].Tested, Is.EqualTo("Testet OK"));
+            Assert.That(edited.Revisions[1].Comment, Is.EqualTo("Bug i regventil"));
+            Assert.That(edited.Latest.Message, Is.EqualTo("La til \"PID\"-regulator"));
 
             // Breaking someone else's forgotten lock.
             kaare.CheckOut(project.Name, "Kåre");
@@ -86,6 +98,24 @@ namespace GiTIA.Core.Tests
         [TestCase(".git")]
         [TestCase("Linje[2]")]
         public void RejectsBadProjectNames(string name) => Assert.Throws<ArgumentException>(() => Store.CheckName(name));
+
+        [TestCase("[Testet: kjørt i manuell] La til X", "La til X", "kjørt i manuell", "")] // format before Kommentar existed
+        [TestCase("La til X", "La til X", "", "")]
+        [TestCase("[Testet: OK]", "", "OK", "")] // git strips the trailing space
+        [TestCase("[Testet: OK] [Kommentar: stenger ventil] La til X", "La til X", "OK", "stenger ventil")]
+        [TestCase("[Kommentar: stenger ventil] La til X", "La til X", "", "stenger ventil")]
+        public void SplitsMessageIntoColumns(string message, string changes, string tested, string comment)
+        {
+            var r = new Revision { Message = message };
+            Assert.That((r.Changes, r.Tested, r.Comment), Is.EqualTo((changes, tested, comment)));
+        }
+
+        [Test]
+        public void ComposeRoundTripsAwkwardText()
+        {
+            var r = new Revision { Message = Revision.Compose(" La til [X] ", "kjørt\n [delvis] ", "") };
+            Assert.That((r.Changes, r.Tested, r.Comment), Is.EqualTo(("La til [X]", "kjørt (delvis)", "")));
+        }
 
         string Zap(string name, int seed)
         {

@@ -18,15 +18,17 @@ namespace GiTIA
         readonly ComboBox project = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 340 };
         readonly TextBox description = new TextBox { Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, Size = new Size(480, 100) };
         readonly TextBox tested = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Size = new Size(480, 60) };
+        readonly TextBox comment = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Size = new Size(480, 60) };
         readonly TextBox uploader = new TextBox { Width = 340 };
         readonly RadioButton fromTia = new RadioButton { Text = "Hent fra TIA Portal som er åpen (kompilerer, lagrer og arkiverer)", AutoSize = true, Checked = true };
         readonly RadioButton fromFile = new RadioButton { Text = "Jeg har arkivert selv – bruk denne .zap-filen:", AutoSize = true };
         readonly TextBox file = new TextBox { Width = 380 };
         readonly bool askTestLevel;
 
-        public UploadForm(IEnumerable<string> projects, string selected, string userName, bool askTestLevel)
+        public UploadForm(IEnumerable<string> projects, string selected, string userName, bool askTestLevel, bool askComment)
         {
             this.askTestLevel = tested.Visible = askTestLevel;
+            comment.Visible = askComment;
             Text = "Last opp ny versjon";
             Font = new Font("Segoe UI", 9.75f);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -50,6 +52,7 @@ namespace GiTIA
                 Caption("Prosjekt:"), Row(project, NewButton("Nytt prosjekt…", NewProject)),
                 Caption("Hva er endret:"), description,
                 new Label { Text = "Testet på anlegget:", AutoSize = true, Margin = new Padding(3, 8, 12, 3), Visible = askTestLevel }, tested,
+                new Label { Text = "Kommentar:", AutoSize = true, Margin = new Padding(3, 8, 12, 3), Visible = askComment }, comment,
                 Caption("Lastet opp av:"), uploader,
                 Caption("Prosjektfil:"), Column(fromTia, fromFile, Row(file, NewButton("Bla gjennom…", Browse))),
                 new Label(), Row(ok, cancel),
@@ -103,14 +106,13 @@ namespace GiTIA
                 return;
             }
             Project = (string)project.SelectedItem;
-            // On one line and in front, so it stays in the commit subject (the history) even if the description has blank lines.
-            Description = (askTestLevel ? $"[Testet: {string.Join(" ", tested.Text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries))}] " : "") + description.Text.Trim();
+            Description = Revision.Compose(description.Text, askTestLevel ? tested.Text : null, comment.Text); // comment is empty when hidden
             Uploader = uploader.Text.Trim();
             ZapFile = fromFile.Checked ? file.Text : null;
             DialogResult = DialogResult.OK;
         }
 
-        static Label Caption(string text) => new Label { Text = text, AutoSize = true, Margin = new Padding(3, 8, 12, 3) };
+        internal static Label Caption(string text) => new Label { Text = text, AutoSize = true, Margin = new Padding(3, 8, 12, 3) };
 
         static Button NewButton(string text, Action click)
         {
@@ -119,7 +121,7 @@ namespace GiTIA
             return button;
         }
 
-        static FlowLayoutPanel Row(params Control[] controls) => Flow(FlowDirection.LeftToRight, controls);
+        internal static FlowLayoutPanel Row(params Control[] controls) => Flow(FlowDirection.LeftToRight, controls);
         static FlowLayoutPanel Column(params Control[] controls) => Flow(FlowDirection.TopDown, controls);
 
         static FlowLayoutPanel Flow(FlowDirection direction, Control[] controls)

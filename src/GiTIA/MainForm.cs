@@ -23,9 +23,18 @@ namespace GiTIA
         readonly SemaphoreSlim gate = new SemaphoreSlim(1); // one git/TIA job at a time
 
         readonly ListView projectList = List(("Prosjekt", 240), ("Status", 300), ("Sist lastet opp", 230));
-        readonly ListView historyList = List(("Dato", 140), ("Lastet opp av", 160), ("Hva er endret", 520));
+        // A grid, not a ListView, so long descriptions wrap inside their cell.
+        readonly DataGridView historyList = new DataGridView
+        {
+            Dock = DockStyle.Fill, ReadOnly = true, RowHeadersVisible = false, MultiSelect = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+            AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToResizeRows = false,
+            BackgroundColor = SystemColors.Window, BorderStyle = BorderStyle.None,
+            DefaultCellStyle = { WrapMode = DataGridViewTriState.True, Alignment = DataGridViewContentAlignment.TopLeft },
+        };
         readonly Label banner = new Label { Dock = DockStyle.Top, Height = 64, Padding = new Padding(12, 0, 12, 0), TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.White };
         readonly Button checkOutButton = new Button { Text = "Sjekk ut (lås og last ned nyeste)", AutoSize = true };
+        readonly Button lockButton = new Button { Text = "Lås", AutoSize = true };
         readonly Button downloadButton = new Button { Text = "Last ned valgt versjon", AutoSize = true };
         readonly Button unlockButton = new Button { Text = "Lås opp", AutoSize = true };
         readonly ToolStrip toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(6, 4, 6, 4) };
@@ -45,15 +54,21 @@ namespace GiTIA
             toolbar.Items.Add("Innstillinger", null, async (s, e) => { if (EditSettings()) await RefreshProjects(); });
 
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(6) };
-            buttons.Controls.AddRange(new Control[] { checkOutButton, downloadButton, unlockButton });
+            buttons.Controls.AddRange(new Control[] { checkOutButton, downloadButton, lockButton, unlockButton });
+            foreach (var (text, fillWeight) in new[] { ("Dato", 0), ("Lastet opp av", 0), ("Hva er endret", 200), ("Testet", 100), ("Kommentar", 100) })
+                historyList.Columns.Add(fillWeight == 0
+                    ? new DataGridViewTextBoxColumn { HeaderText = text, SortMode = DataGridViewColumnSortMode.NotSortable, AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells }
+                    : new DataGridViewTextBoxColumn { HeaderText = text, SortMode = DataGridViewColumnSortMode.NotSortable, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = fillWeight });
             split.Panel1.Controls.Add(projectList);
             split.Panel2.Controls.AddRange(new Control[] { historyList, buttons, banner }); // docked last to first: banner on top
             Controls.AddRange(new Control[] { split, toolbar, new StatusStrip { Items = { status } } });
 
             projectList.SelectedIndexChanged += (s, e) => ShowSelected();
             checkOutButton.Click += (s, e) => CheckOutClick();
+            lockButton.Click += (s, e) => LockClick();
             downloadButton.Click += (s, e) => DownloadClick();
             unlockButton.Click += (s, e) => UnlockClick();
+            historyList.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) EditMessageClick(); };
             var timer = new System.Windows.Forms.Timer { Interval = 60_000, Enabled = true };
             timer.Tick += async (s, e) => { if (gate.CurrentCount > 0) await RefreshProjects(quiet: true); };
             Connect();
@@ -62,7 +77,7 @@ namespace GiTIA
         protected override async void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
-            split.SplitterDistance = 640;
+            split.SplitterDistance = 560;
             if (store == null) EditSettings();
             await RefreshProjects();
         }
@@ -76,6 +91,7 @@ namespace GiTIA
         }
 
         Project Selected => projectList.SelectedItems.Count > 0 ? (Project)projectList.SelectedItems[0].Tag : null;
+        Revision SelectedRevision => historyList.CurrentRow?.Tag as Revision;
 
         void Connect() => store = settings.RepoUrl == "" ? null : new Store(settings.RepoUrl, settings.RepoFolder, Store.CurrentAccount);
 
@@ -95,10 +111,53 @@ namespace GiTIA
             if (ok) Reveal(file);
         }
 
+        // For when you already have the newest version locally.
+        async void LockClick()
+        {
+            var name = Selected.Name;
+            await Run("Låser…", () => store.CheckOut(name, settings.UserName));
+            await RefreshProjects();
+        }
+
+        async void EditMessageClick()
+        {
+            var r = SelectedRevision;
+            if (r == null) return;
+            TextBox Box(string text, int height) => new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Size = new Size(480, height), Text = text };
+            var changes = Box(r.Changes, 100);
+            var tested = Box(r.Tested, 60);
+            var comment = Box(r.Comment, 100);
+            var save = new Button { Text = "Lagre", AutoSize = true, DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "Avbryt", AutoSize = true, DialogResult = DialogResult.Cancel };
+            changes.TextChanged += (s, e) => save.Enabled = changes.Text.Trim() != "";
+            var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Padding = new Padding(12) };
+            grid.Controls.AddRange(new Control[]
+            {
+                UploadForm.Caption("Hva er endret:"), changes,
+                UploadForm.Caption("Testet:"), tested,
+                UploadForm.Caption("Kommentar:"), comment,
+                new Label(), UploadForm.Row(save, cancel),
+            });
+            using (var form = new Form
+            {
+                Text = $"Endre beskrivelse – {r.Project}, versjonen fra {r.Date:dd.MM.yyyy HH:mm}", Font = Font, CancelButton = cancel,
+                FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            })
+            {
+                form.Controls.Add(grid);
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+            }
+            var message = Revision.Compose(changes.Text, tested.Text, comment.Text);
+            if (message == r.Message) return;
+            await Run("Lagrer ny beskrivelse…", () => store.EditMessage(r, message, settings.UserName));
+            await RefreshProjects();
+        }
+
         async void DownloadClick()
         {
             var name = Selected.Name;
-            var commit = historyList.SelectedItems.Count > 0 ? ((Revision)historyList.SelectedItems[0].Tag).Commit : null;
+            var commit = SelectedRevision?.Commit;
             await RefreshProjects(); // the lock warning below must be up to date
             var p = projects.FirstOrDefault(x => x.Name == name);
             var revision = p?.Revisions.FirstOrDefault(r => r.Commit == commit) ?? p?.Latest;
@@ -136,7 +195,7 @@ namespace GiTIA
             await RefreshProjects(); // the warnings below must be up to date
             var preselect = Selected?.Lock?.Mine == true ? Selected : projects.FirstOrDefault(p => p.Lock?.Mine == true) ?? Selected;
             string name, description, uploader, zap;
-            using (var form = new UploadForm(projects.Select(p => p.Name), preselect?.Name, settings.UserName, settings.AskTestLevel))
+            using (var form = new UploadForm(projects.Select(p => p.Name), preselect?.Name, settings.UserName, settings.AskTestLevel, settings.AskComment))
             {
                 if (form.ShowDialog(this) != DialogResult.OK) return;
                 (name, description, uploader, zap) = (form.Project, form.Description, form.Uploader, form.ZapFile);
@@ -243,6 +302,7 @@ namespace GiTIA
         void ShowProjects()
         {
             var selected = Selected?.Name;
+            var commit = SelectedRevision?.Commit; // read now: clearing the list below empties the history
             projectList.BeginUpdate();
             projectList.Items.Clear();
             foreach (var p in projects)
@@ -258,20 +318,22 @@ namespace GiTIA
             }
             if (projectList.SelectedItems.Count == 0 && projectList.Items.Count > 0) projectList.Items[0].Selected = true;
             projectList.EndUpdate();
-            ShowSelected();
+            ShowSelected(commit);
         }
 
-        void ShowSelected()
+        // keepCommit: the version to keep selected, so the refresh every minute does not move the selection.
+        void ShowSelected(string keepCommit = null)
         {
             var p = Selected;
-            historyList.BeginUpdate();
-            historyList.Items.Clear();
+            historyList.Rows.Clear();
             foreach (var r in p?.Revisions ?? new List<Revision>())
-                historyList.Items.Add(new ListViewItem(new[] { r.Date.ToString("dd.MM.yyyy HH:mm"), r.Author, r.Message }) { Tag = r });
-            if (historyList.Items.Count > 0) historyList.Items[0].Selected = true;
-            historyList.EndUpdate();
+                historyList.Rows[historyList.Rows.Add(r.Date.ToString("dd.MM.yyyy HH:mm"), r.Author, r.Changes, r.Tested, r.Comment)].Tag = r;
+            var row = historyList.Rows.Cast<DataGridViewRow>().FirstOrDefault(x => ((Revision)x.Tag).Commit == keepCommit)
+                      ?? historyList.Rows.Cast<DataGridViewRow>().FirstOrDefault();
+            if (row != null) historyList.CurrentCell = row.Cells[0];
 
             checkOutButton.Enabled = p?.Lock == null && p?.Latest != null;
+            lockButton.Enabled = p != null && p.Lock == null;
             downloadButton.Enabled = p?.Latest != null;
             unlockButton.Enabled = p?.Lock != null;
             unlockButton.Text = p?.Lock?.Mine == true ? "Angre utsjekk" : "Bryt låsen";
@@ -292,9 +354,19 @@ namespace GiTIA
         {
             var edited = Settings.Load();
             var save = new Button { Text = "Lagre", Dock = DockStyle.Bottom, Height = 36, DialogResult = DialogResult.OK };
+            var lfs = new Label { Dock = DockStyle.Bottom, Height = 20, ForeColor = Color.Gray, Font = new Font(Font.FontFamily, 8f), Visible = store != null };
             using (var form = new Form { Text = "Innstillinger", Size = new Size(680, 480), StartPosition = FormStartPosition.CenterParent, Font = Font, MinimizeBox = false, MaximizeBox = false })
             {
-                form.Controls.AddRange(new Control[] { new PropertyGrid { Dock = DockStyle.Fill, SelectedObject = edited, ToolbarVisible = false }, save });
+                form.Controls.AddRange(new Control[] { new PropertyGrid { Dock = DockStyle.Fill, SelectedObject = edited, ToolbarVisible = false }, lfs, save });
+                form.Shown += async (s, e) =>
+                {
+                    // Just information: any failure shows as unknown and never gets in the way.
+                    var current = store;
+                    string text;
+                    try { text = $"Git LFS i bruk: {await Task.Run(() => current.LfsBytes()) / 1e9:0.00} GB (alle versjoner i repoet)"; }
+                    catch (Exception) { text = "Git LFS i bruk: ukjent"; }
+                    if (!lfs.IsDisposed) lfs.Text = text;
+                };
                 if (form.ShowDialog(this) != DialogResult.OK) return false;
             }
             edited.RepoUrl = edited.RepoUrl.Trim();

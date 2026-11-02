@@ -9,12 +9,19 @@ Historikken er git-historikken. Det trengs ingen egen server.
 
 1. **Morgen:** velg prosjekt → **Sjekk ut**. Prosjektet låses i ditt navn, og nyeste versjon lastes ned som
    `dato_hvem_prosjekt.zapNN` til nedlastingsmappen. Åpne den i TIA (Retrieve).
+   Har du allerede nyeste versjon lokalt, holder det med **Lås**.
 2. **Kveld:** **Last opp ny versjon** → velg prosjekt (eller *Nytt prosjekt…*), skriv hva som er endret og hvem som laster opp.
    Appen kobler seg til TIA som kjører, kompilerer alle enheter (spør om du vil fortsette hvis det feiler), lagrer,
    arkiverer til arkivmappen og laster opp. Låsen din frigjøres.
    Feiler TIA-delen, viser appen hva som gikk galt og hvordan du gjør det manuelt, og lar deg velge .zap-filen selv.
    På anlegg der oppetid er viktigst: slå på *Spør hvor godt endringen er testet* under **Innstillinger**, så må du også
-   skrive hvor godt endringen er testet på anlegget (vises som f.eks. `[Testet: kjørt med pumpe 2 i manuell]` i historikken).
+   skrive hvor godt endringen er testet på anlegget (vises i egen kolonne i historikken).
+   Med *Vis kommentarfelt* kan du også skrive en valgfri kommentar ved opplasting.
+
+Historikken har kolonnene *Hva er endret*, *Testet* og *Kommentar*. Dobbeltklikk på en versjon
+for å rette beskrivelsen (alle kan gjøre det), f.eks. fra «IKKE TESTET» til «Testet OK», eller skrive en kommentar (f.eks. om en kjent feil).
+Git-historikken skrives aldri om: den nye teksten lagres i `meldinger.txt` i prosjektmappen. I selve commit-meldingen står
+feltene som `[Testet: …] [Kommentar: …] hva som er endret`.
 
 Andres utsjekker vises i rødt. Laster du ned et prosjekt noen andre har sjekket ut, får du en tydelig advarsel.
 Glemt utsjekk kan brytes med **Bryt låsen**.

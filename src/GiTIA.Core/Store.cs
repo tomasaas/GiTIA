@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace GiTIA.Core
 {
@@ -15,9 +16,30 @@ namespace GiTIA.Core
 
     public class Revision
     {
+        static readonly Regex Parts = new Regex(@"^(?:\[Testet: ([^\]]*)\] ?)?(?:\[Kommentar: ([^\]]*)\] ?)?(.*)$", RegexOptions.Singleline);
+
         public string Project, Commit, Author, Message, RepoPath;
         public DateTime Date;
         public string FileName => Store.ArchiveName(Date, Author, Project) + Path.GetExtension(RepoPath);
+
+        // The parts of Message that Compose put together, shown as separate columns.
+        public string Tested => Parts.Match(Message).Groups[1].Value;
+        public string Comment => Parts.Match(Message).Groups[2].Value;
+        public string Changes => Parts.Match(Message).Groups[3].Value;
+
+        /// <summary>
+        /// One message, readable as is in git: "[Testet: …] [Kommentar: …] what changed". The tags go on one line and
+        /// in front, so they stay in the commit subject (the history) even if the description has blank lines.
+        /// </summary>
+        public static string Compose(string changes, string tested, string comment)
+        {
+            string Tag(string name, string text)
+            {
+                text = string.Join(" ", (text ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries)).Replace('[', '(').Replace(']', ')');
+                return text == "" ? "" : $"[{name}: {text}] ";
+            }
+            return Tag("Testet", tested) + Tag("Kommentar", comment) + (changes ?? "").Trim();
+        }
     }
 
     public class Project
@@ -31,13 +53,14 @@ namespace GiTIA.Core
     /// <summary>
     /// The shared store: a git repository with one folder per TIA project. A folder holds the newest
     /// archive (&lt;project&gt;.zapNN, kept in Git LFS) and, while someone has the project checked out,
-    /// lock.txt saying who. Every change starts from the remote's latest state and is pushed at once,
+    /// lock.txt saying who. meldinger.txt holds descriptions edited after upload (commit, tab, new message; the last
+    /// line wins), so history is never rewritten. Every change starts from the remote's latest state and is pushed at once,
     /// so a rejected push just means someone else got there first: start over from their state.
     /// The local clone belongs to the app; anything in it that is not pushed gets thrown away.
     /// </summary>
     public class Store
     {
-        const string LockFile = "lock.txt";
+        const string LockFile = "lock.txt", MessagesFile = "meldinger.txt";
         const string LfsRule = "*.zap* filter=lfs diff=lfs merge=lfs -text";
         readonly string url, dir, account;
         string branch;
@@ -71,7 +94,29 @@ namespace GiTIA.Core
                 .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
             foreach (var revision in History())
                 projects.FirstOrDefault(p => p.Name == revision.Project)?.Revisions.Add(revision);
+            foreach (var p in projects)
+            {
+                var file = Path.Combine(dir, p.Name, MessagesFile);
+                if (!File.Exists(file)) continue;
+                var edited = File.ReadAllLines(file).Select(l => l.Split(new[] { '\t' }, 2)).Where(e => e.Length == 2)
+                    .GroupBy(e => e[0]).ToDictionary(g => g.Key, g => g.Last()[1]);
+                foreach (var r in p.Revisions)
+                    if (edited.TryGetValue(r.Commit, out var message)) r.Message = message;
+            }
             return projects;
+        }
+
+        /// <summary>Replaces what the history shows for one version. Any whitespace, newlines too, becomes one space.</summary>
+        public void EditMessage(Revision revision, string message, string name)
+        {
+            var line = string.Join(" ", (message ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+            if (line == "") throw new ArgumentException("Beskrivelsen kan ikke være tom.");
+            Publish($"{revision.Project}: ny beskrivelse av versjonen fra {revision.Date:dd.MM.yyyy HH:mm}", name, () =>
+            {
+                if (!Directory.Exists(Path.Combine(dir, revision.Project))) throw new InvalidOperationException($"Prosjektet {revision.Project} finnes ikke.");
+                File.AppendAllText(Path.Combine(dir, revision.Project, MessagesFile), revision.Commit + "\t" + line + "\n");
+                Run("add", "--", revision.Project + "/" + MessagesFile);
+            });
         }
 
         /// <summary>Locks the project for you and returns its newest version: the one to download and work on.</summary>
@@ -126,6 +171,18 @@ namespace GiTIA.Core
                 if (ReadLock(folder)?.Mine == true) Run("rm", "-q", "--", folder + "/" + LockFile);
             });
             try { Run("lfs", "prune"); } catch (GitException) { } // frees local copies of old, already pushed archives
+        }
+
+        /// <summary>
+        /// What the archives take up in Git LFS on the server: every version ever uploaded, each counted once.
+        /// Read from the LFS pointers in the local clone, so nothing is downloaded. Uses the clone as last refreshed.
+        /// </summary>
+        public long LfsBytes()
+        {
+            var patch = Run("log", "--all", "-p", "-U3", "--no-renames", "--no-textconv", "--no-ext-diff", "--format=", "--", ":(glob)*/*.zap*");
+            // A new pointer's oid is an added line; its size line is added too, or unchanged context when the size is the same.
+            return Regex.Matches(patch, @"^\+oid sha256:([0-9a-f]{64})\r?\n[+ ]size (\d+)", RegexOptions.Multiline).Cast<Match>()
+                .GroupBy(m => m.Groups[1].Value).Sum(g => long.Parse(g.First().Groups[2].Value));
         }
 
         /// <summary>Downloads one version's archive to <paramref name="file"/>. Only that file is fetched from LFS.</summary>
